@@ -1,0 +1,213 @@
+---
+title: "Toronto Apartment Building Evaluation Score can be Misleading"
+author: "Kyunghyun Kim"
+date: "06 February 2022"
+output:
+  pdf_document: default
+  bookdown::pdf_document2: default
+  word_document: default
+abstract: The Apartment Building Evaluation data was pulled from the City of Toronto
+  Open Portal to analyze the factors affecting building performance in Toronto. This
+  data shows that privately owned apartment buildings have the highest average evaluation
+  score while Toronto Community Housing Corporation (TCHC) buildings have the lowest.
+  However, the influence of specific factors in deciding a rating varies from building
+  to building. While the results from the apartment building evaluation data can be
+  a useful tool for a specific property type, it cannot accurately measure the performance
+  of all buildings types in Toronto.
+thanks: 'https://github.com/KyunghyunKim1224'
+toc: no
+bibliography: references.bib
+---
+
+
+```{r setup, include=FALSE}
+install.packages("opendatatoronto")
+install.packages("dplyr")
+install.packages("ggplot2")
+install.packages ("tidyverse")
+install.packages("knitr")
+install.packages("cowplot")
+```
+
+```{r, include=FALSE}
+library(knitr)
+library(tidyverse)
+library(opendatatoronto)
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(cowplot)
+```
+
+
+# Introduction
+Buildings in Toronto must undergo evaluation at least once every three years. The City assigns a Bylaw Enforcement Officer for each building evaluation and they conduct an inspection of the apartment building including but not limited to amenities, common areas, elevators, exterior building, exterior grounds, garbage and recycling management, lighting, mandatory plans, mechanical systems, parking facilities and garages, security systems, tenant notification board, and overall cleanliness (Toronto, 2021). According to Khalil et al (2016), building performance refers to the capacity of the building to operate at maximum efficiency and fulfill its function throughout its service life. The building evaluation is important since measuring the performance of a building is the best way to improve the economic, physical, and functional development of a building, ensuring that its objectives are met (Koleoso et al. 2013). 
+
+
+# Data
+
+```{r, include=FALSE}
+# get package
+package <- show_package("4ef82789-e038-44ef-a478-a8f3590c3eb1")
+package
+ 
+# get all resources for this package
+resources <- list_package_resources("4ef82789-e038-44ef-a478-a8f3590c3eb1")
+ 
+# identify datastore resources; by default, Toronto Open Data sets datastore resource format to CSV for non-geospatial and GeoJSON for geospatial resources
+datastore_resources <- filter(resources, tolower(format) %in% c('csv', 'geojson'))
+ 
+# load the first datastore resource as a sample
+data <- filter(datastore_resources, row_number()==1) %>% get_resource()
+
+```
+
+
+
+Analysis for this project uses the R statistical programming language (R Core Team 2020), and more specifically, the `tidyverse` package for data manipulation (Wickham et al. 2019). The apartment building evaluation dataset analyzed in this report was obtained in the CSV format from the city of Toronto Open Data Portal using the R package `opendatatoronto` (Gelfand 2020). The apartment building evaluation dataset contains aggregated data of all evaluated apartment buildings registered with RentSafeTO between 2017 and 2019 and was last updated on February 1, 2022. All of the buildings are evaluated from 2017 to 2021. There are 9758 observations in the dataset and 40 attributes. Among these observations, 8207 are privately owned buildings, 609 are buildings for social housing and 942 are Toronto Community Housing Corporation (TCHC) buildings. The original dataset includes some unnecessary attributes to complete this analysis such as RSN, GRID, latitude, longitude, X (projected X coordinate), and Y (projected Y coordinate) which were removed before analysis. The data types of all columns except property type, ward name, site address, results of the score are changed from character to numeric since the statistical methods that I will be using in this report can only be used with numeric data types. A sample view of the dataset is displayed below.
+```{r, include=FALSE}
+data <-
+  data |> 
+  select(-RSN, -GRID, -LATITUDE, -LONGITUDE, -X, -Y)
+
+data <- data |>
+     mutate_at(c(1:4), as.numeric)
+data <- data |>
+     mutate_at(c(9:10), as.numeric)
+data <- data |>
+     mutate_at("SCORE", as.numeric)
+data <- data |>
+     mutate_at(c(14:ncol(data)), as.numeric)
+head(data)
+```
+
+```{r, include=FALSE}
+data %>% 
+  summarise_all(list(~sum(is.na(.))))
+data<-na.omit(data)
+janitor::get_dupes(data)
+```
+
+To better understand how evaluation score varies by each property type, I reported the max, the min, the mean, and the standard deviation of each property type using `kable()` from `knitr` (Xie 2021) (Table 1). The table below shows that private buildings have the highest average evaluation score among three different property types although it has the lowest minimum evaluation score. To see more detailed population numbers, please refer to Table 1. 
+Figure 1 is created using `ggplot2` (Wickham 2016) which is a representation of the score distribution of each property type. This figure also shows that private buildings have the highest evaluation score and social housing buildings have the second-highest score and TCHC has the lowest score.
+```{r,echo=FALSE}
+
+data |>
+  group_by(PROPERTY_TYPE) |>
+  summarise(max=max(SCORE),min=min(SCORE),mean = mean(SCORE),sd=sd(SCORE)) |>
+  kable(caption = "Variation of Evaluation Score",
+               col.names = c("Property Type ","Max Evaluation Score ","Min Evaluation Score", "Average Evaluation Score "," Score Standard Deviation "),
+              booktabs = TRUE,
+            linesep = ""
+        )
+
+```
+
+```{r,fig.cap = "Apartment Building Evaluation Score Distribution by Property Type ", echo=FALSE}
+ggplot(data = data) + 
+  geom_histogram(aes(x = SCORE, y = ..density.., fill = PROPERTY_TYPE), 
+                 position = 'dodge', 
+                 bins = 10) 
+```
+
+\newpage
+
+Below Figure 2 shows the distribution of scores of common areas of each building type. Specifically, it is the distribution of four different criteria: the condition of the entrance, the condition of the entrance doors and windows, the condition of the stairwells, and the condition of the elevator(s). The scores for each criterion range from 1 to 5, with 1 being the lowest and 5 being the highest (Toronto 2021). From the graph, it is clear that privately-owned buildings have the highest score in each criterion except for the stairwells. 
+\
+\
+\
+```{r, echo=FALSE}
+#common area
+A<-ggplot(data = data) + 
+  geom_density(aes(x = ENTRANCE_LOBBY,color=PROPERTY_TYPE), 
+               bw = .08) + 
+  scale_x_log10() 
+B<-ggplot(data = data) + 
+  geom_density(aes(x = ENTRANCE_DOORS_WINDOWS,color=PROPERTY_TYPE), 
+               bw = .08) + 
+  scale_x_log10() 
+C<-ggplot(data = data) + 
+  geom_density(aes(x = ELEVATORS,color=PROPERTY_TYPE), 
+               bw = .08) + 
+  scale_x_log10() 
+D<-ggplot(data = data) + 
+  geom_density(aes(x = STAIRWELLS,color=PROPERTY_TYPE), 
+               bw = .08) + 
+  scale_x_log10() 
+```
+
+```{r,fig.cap = "Score of Common Areas by Property Type",echo=FALSE}
+plot_grid(A, B, C, D, ncol = 2, nrow = 2)
+
+```
+
+\newpage
+A similar trend can be observed in Figure 3 which is also created using `ggplot2` (Wickham 2016). Figure 3 is the distribution of garbage and recycling management score by each building type. The left graph is the score representation of the condition of the garbage/chute rooms rating from 1 to 5, and the right graph is the score distribution of the condition of the garbage bin storage room or outdoor enclosure area. The private buildings have a better garbage and recycling management system than TCHC and social housing buildings. 
+\
+\
+\
+```{r,include=FALSE}
+#garbage
+f1<-ggplot(data = data) + 
+  geom_density(aes(x = GARBAGE_CHUTE_ROOMS,color=PROPERTY_TYPE), 
+               bw = .08) + 
+  scale_x_log10() 
+f2<-ggplot(data = data) + 
+  geom_density(aes(x = GARBAGE_BIN_STORAGE_AREA,color=PROPERTY_TYPE), 
+               bw = .08) + 
+  scale_x_log10() 
+
+
+```
+
+```{r,fig.cap = "Score of Garbage and Recycling Management by Property Type",echo=FALSE}
+plot_grid(f1, f2, ncol = 1, nrow = 2)
+```
+
+\newpage
+However, different trends are seen for the exterior building. The exterior building includes the condition of cladding/bricks/paint and the condition of exterior walkways. From Figure 4, the left graph shows that the social housing buildings have a slightly more high exterior cladding score than private buildings and the right graph shows that TCHC has the highest exterior walkways score. 
+
+```{r,include=FALSE}
+
+#Exterior
+Ex1<-ggplot(data = data) + 
+  geom_density(aes(x = EXTERIOR_CLADDING,color=PROPERTY_TYPE), 
+               bw = .08) + 
+  scale_x_log10() 
+
+Ex2<-ggplot(data = data) + 
+  geom_density(aes(x = EXTERIOR_WALKWAYS,color=PROPERTY_TYPE), 
+               bw = .08) + 
+  scale_x_log10() 
+
+```
+
+
+```{r,fig.cap="Score of Exterior Building by Property Type",echo=FALSE}
+plot_grid(Ex1, Ex2, ncol = 1, nrow = 2)
+
+```
+
+
+```{r, include=FALSE}
+#safety
+
+s1<-ggplot(data = data) + 
+  geom_density(aes(x = BALCONY_GUARDS,color=PROPERTY_TYPE), 
+               bw = .08) + 
+  scale_x_log10() 
+
+s2<-ggplot(data = data) + 
+  geom_density(aes(x = SECURITY,color=PROPERTY_TYPE), 
+               bw = .08) + 
+  scale_x_log10() 
+
+plot_grid(s1, s2, ncol = 2, nrow = 1)
+```
+
+
+\newpage
+
+
+# References
+
